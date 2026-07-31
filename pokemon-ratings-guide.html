@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pokémon Mayhem — Ratings Guide (all 1,025)</title>
+<style>
+  :root{--bg:#0f1220;--panel:#171b2e;--panel2:#1e2440;--ink:#e8ecff;--muted:#a3abd0;
+    --line:#2c3358;--green:#3fbf7f;--orange:#e6a23c;--red:#e15b64;--blue:#5b8def}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:24px 16px 70px}
+  h1{font-size:25px;margin:0 0 4px} .lead{color:var(--muted);margin:0 0 14px}
+  a{color:var(--blue)}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0}
+  input,select{background:#0b0e1a;border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:8px 10px;font-size:14px}
+  input#q{flex:1;min-width:200px}
+  .count{color:var(--muted);font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}
+  th{position:sticky;top:0;background:var(--panel2);cursor:pointer;user-select:none;white-space:nowrap}
+  th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr:hover td{background:#141830}
+  img{width:36px;height:36px;image-rendering:pixelated;vertical-align:middle}
+  .rat{font-weight:700} .el{color:var(--green)} .gd{color:var(--blue)}
+  .md{color:var(--orange)} .lo{color:var(--red)}
+  .role{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:#bcc6ff}
+  .type{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 6px;margin-right:2px}
+  .leg{color:#ffd66b}
+  .foot{margin-top:24px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pokémon Mayhem — Ratings Guide</h1>
+  <p class="lead">Every Pokémon's computed battle rating, role and stats. Click a column header
+  to sort; type to filter. Play the game → <a href="pokemon-mayhem.html">Pokémon Mayhem</a> ·
+  <a href="worlds-mayhem-ratings-guide.html">Worlds Mayhem player ratings</a>.</p>
+
+  <div class="controls">
+    <input id="q" placeholder="Search name…">
+    <select id="role"><option value="">All roles</option></select>
+    <select id="gen"><option value="">All gens</option></select>
+    <label class="count"><input type="checkbox" id="legOnly"> Legendary/Mythical only</label>
+    <span class="count" id="count"></span>
+  </div>
+
+  <table id="tbl">
+    <thead><tr>
+      <th data-k="id">#</th><th>Sprite</th><th data-k="name">Name</th>
+      <th data-k="role">Role</th><th>Types</th>
+      <th data-k="rating" class="num">Rating ▼</th><th data-k="bst" class="num">BST</th>
+      <th data-k="hp" class="num">HP</th><th data-k="atk" class="num">Atk</th>
+      <th data-k="def" class="num">Def</th><th data-k="spa" class="num">SpA</th>
+      <th data-k="spd" class="num">SpD</th><th data-k="spe" class="num">Spe</th>
+    </tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+  <div class="foot" id="foot"></div>
+</div>
+<script src="./pokemon-mayhem-data.js"></script>
+<script>
+(function(){
+  "use strict";
+  const P = window.POKEMON, SPRITE = window.POKE_META.spriteBase;
+  const $ = id => document.getElementById(id);
+  let sortK = "rating", sortDir = -1;
+
+  const roles = [...new Set(P.map(m=>m.role))].sort();
+  roles.forEach(r=>$("role").insertAdjacentHTML("beforeend",`<option>${r}</option>`));
+  const gens = [...new Set(P.map(m=>m.gen))].sort((a,b)=>a-b);
+  gens.forEach(g=>$("gen").insertAdjacentHTML("beforeend",`<option value="${g}">Gen ${g}</option>`));
+
+  const cls = r => r>=88?"el":r>=78?"gd":r>=68?"md":"lo";
+
+  function rows(){
+    const q = $("q").value.trim().toLowerCase();
+    const role = $("role").value, gen = $("gen").value, leg = $("legOnly").checked;
+    let list = P.filter(m =>
+      (!q || m.name.toLowerCase().includes(q)) &&
+      (!role || m.role===role) && (!gen || m.gen==+gen) && (!leg || m.leg));
+    list.sort((a,b)=>{
+      const av = sortK in a ? a[sortK] : a.s[sortK];
+      const bv = sortK in b ? b[sortK] : b.s[sortK];
+      if(av<bv) return -sortDir; if(av>bv) return sortDir; return a.id-b.id;
+    });
+    return list;
+  }
+
+  function render(){
+    const list = rows();
+    $("body").innerHTML = list.map(m=>`<tr>
+      <td class="num">${m.id}</td>
+      <td><img loading="lazy" src="${SPRITE}${m.id}.png" alt="" onerror="this.style.visibility='hidden'"></td>
+      <td>${m.name}${m.leg?' <span class="leg">★</span>':''}</td>
+      <td><span class="role">${m.role}</span></td>
+      <td>${m.types.map(t=>`<span class="type">${t}</span>`).join("")}</td>
+      <td class="num rat ${cls(m.rating)}">${m.rating}</td>
+      <td class="num">${m.bst}</td>
+      <td class="num">${m.s.hp}</td><td class="num">${m.s.atk}</td><td class="num">${m.s.def}</td>
+      <td class="num">${m.s.spa}</td><td class="num">${m.s.spd}</td><td class="num">${m.s.spe}</td>
+    </tr>`).join("");
+    $("count").textContent = `${list.length} of ${P.length} shown`;
+  }
+
+  document.querySelectorAll("th[data-k]").forEach(th=>{
+    th.onclick = () => {
+      const k = th.getAttribute("data-k");
+      if(sortK===k) sortDir=-sortDir; else { sortK=k; sortDir=(k==="name"||k==="role")?1:-1; }
+      document.querySelectorAll("th[data-k]").forEach(t=>t.textContent=t.textContent.replace(/ [▲▼]/,""));
+      th.textContent += sortDir>0?" ▲":" ▼";
+      render();
+    };
+  });
+  ["q","role","gen"].forEach(id=>$(id).addEventListener("input",render));
+  $("legOnly").addEventListener("change",render);
+
+  render();
+  $("foot").innerHTML = `Ratings computed from PokeAPI base stats using the Worlds-Mayhem-style ` +
+    `pipeline (per-role normalization → weighted score → BST calibration → compression). ` +
+    `100% client-side. See <a href="worlds-mayhem-explained.html">how it works</a>.`;
+})();
+</script>
+</body>
+</html>

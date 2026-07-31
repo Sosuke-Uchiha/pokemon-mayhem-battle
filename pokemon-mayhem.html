@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pokémon Mayhem — build a team, win the League</title>
+<style>
+  :root{--bg:#0f1220;--panel:#171b2e;--panel2:#1e2440;--ink:#e8ecff;--muted:#a3abd0;
+    --line:#2c3358;--green:#3fbf7f;--orange:#e6a23c;--red:#e15b64;--blue:#5b8def;--purple:#9b6ef3}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:24px 16px 70px}
+  h1{font-size:27px;margin:0 0 4px} .lead{color:var(--muted);margin:0 0 14px}
+  a{color:var(--blue)}
+  .tabs{display:flex;gap:8px;margin:12px 0}
+  .tab{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 16px;
+    cursor:pointer;font-weight:600;color:var(--muted)}
+  .tab.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input,select{background:#0b0e1a;border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:9px 11px;font-size:14px}
+  input#search{flex:1;min-width:200px}
+  .btn{background:var(--blue);color:#fff;border:0;border-radius:10px;padding:10px 18px;
+    font-size:15px;font-weight:700;cursor:pointer}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:600}
+  .meter{display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+  .meter .k{font-size:12px;color:var(--muted)} .meter .v{font-size:22px;font-weight:800;color:#fff}
+  .v.over{color:var(--red)}
+  .results{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;margin-top:10px}
+  .opt{display:flex;gap:10px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+  .opt:hover{background:var(--panel2)} .opt img{width:40px;height:40px;image-rendering:pixelated}
+  .opt .nm{font-weight:600} .opt .sub{font-size:12px;color:var(--muted)}
+  .opt .cost{margin-left:auto;font-weight:700;color:#ffd66b;white-space:nowrap}
+  .team{display:grid;gap:8px;grid-template-columns:repeat(3,1fr)}
+  @media(max-width:720px){.team{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:460px){.team{grid-template-columns:1fr}}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;
+    display:flex;gap:9px;align-items:center;position:relative}
+  .card img{width:44px;height:44px;image-rendering:pixelated}
+  .card .nm{font-weight:600;font-size:14px} .card .sub{font-size:11px;color:var(--muted)}
+  .card .ovr{margin-left:auto;font-weight:700}
+  .card .rm{position:absolute;top:4px;right:6px;color:var(--muted);cursor:pointer;font-size:12px}
+  .card .up{position:absolute;bottom:4px;right:6px;color:var(--muted);cursor:pointer;font-size:12px}
+  .card .rm:hover{color:var(--red)} .card .up:hover{color:var(--blue)}
+  .ovr.el{color:var(--green)} .ovr.gd{color:var(--blue)} .ovr.md{color:var(--orange)} .ovr.lo{color:var(--red)}
+  .empty{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;color:var(--muted);font-size:13px}
+  .type{font-size:10px;border:1px solid var(--line);border-radius:999px;padding:0 6px;margin-right:2px}
+  .role{font-size:10px;border:1px solid var(--line);border-radius:999px;padding:0 6px;color:#bcc6ff}
+  .brk{font-size:13px;color:var(--muted);margin-top:4px} .brk b{color:var(--ink)}
+  .draftgrid{display:grid;gap:10px;grid-template-columns:repeat(5,1fr)}
+  @media(max-width:720px){.draftgrid{grid-template-columns:repeat(2,1fr)}}
+  .draftcard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;
+    text-align:center;cursor:pointer}
+  .draftcard:hover{border-color:var(--blue)} .draftcard img{width:64px;height:64px;image-rendering:pixelated}
+  .draftcard .nm{font-weight:600;font-size:13px} .draftcard .ovr{font-weight:800;font-size:18px}
+  .bracket{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;
+    background:#0b0e1a66;border:1px solid var(--line);border-radius:10px;padding:8px}
+  .bracket:empty{display:none}
+  .bracket::-webkit-scrollbar{width:8px}
+  .bracket::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+  .card.facedown{opacity:.85}
+  .qmark{width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;
+    font-size:24px;font-weight:800;color:var(--muted);background:#0b0e1a;border-radius:8px}
+  .logline{font-size:13.5px;color:var(--muted);padding:1px 12px}
+  .logline.gm{color:#ffd66b;font-weight:700;margin-top:6px}
+  .logline.win{color:var(--green);font-weight:600}
+  .logline.lose{color:var(--red);font-weight:600}
+  .logline.evo{color:#c9a5ff;font-weight:700;text-shadow:0 0 12px rgba(180,120,255,.35)}
+  .logline.abl{color:#7fd4c1;font-weight:600}
+  .stage{display:flex;align-items:center;justify-content:space-around;gap:12px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px}
+  .fighter{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:150px}
+  .fighter img{width:96px;height:96px;image-rendering:pixelated}
+  .fcap{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;text-align:center}
+  .fcap .pfp{width:44px;height:44px;image-rendering:auto;display:block;margin:0 auto 2px;
+    border-radius:50%;border:1px solid var(--line);background:#0b0e1a}
+  .fnm{font-weight:700;font-size:15px}
+  .tagx{font-size:10px;background:#7b4dff33;color:#c9a5ff;padding:1px 6px;border-radius:8px;font-weight:800;vertical-align:middle}
+  .abx{font-size:9px;background:#7fd4c122;color:#7fd4c1;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700;vertical-align:middle}
+  .abline{color:#7fd4c1}
+  .hpbar{width:150px;height:10px;background:#0b0e1a;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .hpfill{height:100%;width:100%;background:var(--green);transition:width .35s,background .35s}
+  .hptxt{font-size:11px;color:var(--muted)}
+  .vsbig{font-weight:900;font-size:22px;color:var(--muted)}
+  .roundlbl{font-size:12px;font-weight:800;color:#ffd66b;text-transform:uppercase;
+    letter-spacing:.08em;white-space:nowrap;margin-bottom:4px}
+  .dmg{color:var(--red);font-weight:700;font-size:12px;margin-left:6px}
+  .match{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:8px 12px;font-size:14px}
+  .match .vs{color:var(--muted);font-size:12px} .match .res{margin-left:auto;font-weight:700}
+  .win{color:var(--green)} .lose{color:var(--red)}
+  .side{flex:1} .side.me{color:#ffd66b;font-weight:600}
+  .verdict{font-size:19px;font-weight:800;text-align:center;padding:14px;border-radius:12px;margin-top:12px}
+  .verdict.w{background:rgba(63,191,127,.15);color:var(--green);border:1px solid var(--green)}
+  .verdict.l{background:rgba(225,91,100,.15);color:var(--red);border:1px solid var(--red)}
+  .muted{color:var(--muted)} .small{font-size:13px}
+  .foot{margin-top:30px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+  .overlay{position:fixed;inset:0;z-index:80;background:rgba(5,7,15,.72);backdrop-filter:blur(3px);
+    display:flex;align-items:center;justify-content:center}
+  .modal{width:min(860px,92vw);height:min(660px,90vh);position:relative;margin:0;
+    display:flex;flex-direction:column;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.55)}
+  .modal .bracket{flex:1;min-height:0;max-height:none}
+  .close{position:absolute;top:10px;right:14px;cursor:pointer;color:var(--muted);
+    font-weight:800;font-size:17px;line-height:1;padding:4px}
+  .close:hover{color:var(--red)}
+  .roundpop{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;
+    background:rgba(5,7,15,.6);backdrop-filter:blur(2px);border-radius:inherit}
+  .rp-card{background:var(--panel2);border:1px solid var(--green);color:var(--green);text-align:center;
+    font-weight:800;font-size:21px;padding:20px 34px;border-radius:14px;max-width:80%;
+    box-shadow:0 0 40px rgba(63,191,127,.25);animation:rp-pop .45s cubic-bezier(.2,1.4,.4,1)}
+  .rp-card.gold{border-color:#ffd66b;color:#ffd66b;box-shadow:0 0 60px rgba(255,214,107,.35);font-size:26px}
+  .rp-card .rp-sub{font-size:14px;font-weight:600;color:var(--muted);margin-top:6px}
+  @keyframes rp-pop{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+  .confetti{position:fixed;inset:0;z-index:200;pointer-events:none;overflow:hidden}
+  .confetti i{position:absolute;top:-16px;width:9px;height:14px;border-radius:2px;opacity:.95;
+    animation:cfall linear forwards}
+  @keyframes cfall{to{transform:translateY(108vh) rotate(760deg);opacity:.75}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pokémon Mayhem</h1>
+  <p class="lead">Welcome, Trainer! Assemble your dream team and fight your way through the
+  <b>Pokémon League</b> — four knockout rounds guarded by <b>gym leaders and champions</b>.
+  Pick smart: every Pokémon has a <b>point cost</b>, the faster one strikes first, <b>type matchups</b>
+  can turn a duel, and your squad carries its <b>battle scars</b> from round to round. Set your
+  <b>battle order</b> (first card leads, last is your ace) and watch every hit land on live HP bars —
+  your Pokémon might even <b>evolve</b>, <b>Mega Evolve</b>, or <b>Gigantamax</b> mid-fight!
+  Go balanced, go all-in on a theme (all-Tank!), or test your instincts in <b>Draft mode</b>.
+  <span class="small">(Spoilers: <a href="pokemon-ratings-guide.html">ratings guide</a> ·
+  <a href="pokemon-mayhem-explained.html">how the engine works</a>)</span></p>
+
+  <div class="tabs">
+    <div class="tab on" data-mode="budget">💰 Budget Builder</div>
+    <div class="tab" data-mode="draft">🎴 Draft (pick 1 of 5)</div>
+  </div>
+
+  <!-- ===== BUDGET MODE ===== -->
+  <div id="budgetMode">
+    <div class="panel">
+      <div class="meter">
+        <div><div class="k">Budget left</div><div class="v" id="budgetLeft">—</div></div>
+        <div><div class="k">Team size</div><div class="v" id="sizeLeft">0 / 6</div></div>
+        <div class="row" style="margin-left:auto">
+          <button class="btn ghost" id="autoBtn">🎲 Auto-fill</button>
+          <button class="btn ghost" id="clearBtn">Clear</button>
+          <button class="btn" id="simBtn" disabled>Simulate League ▶</button>
+        </div>
+      </div>
+      <div class="brk" id="brk">Add up to 6 Pokémon. A varied roster (many roles) and a full bench beat one superstar.</div>
+    </div>
+    <div class="panel">
+      <div class="row">
+        <input id="search" placeholder="Search any Pokémon…">
+        <select id="roleFilter"><option value="">All roles</option></select>
+        <select id="sortBy">
+          <option value="cost-desc">Sort: cost (high → low)</option>
+          <option value="cost-asc">Sort: cost (low → high)</option>
+          <option value="name">Sort: name</option>
+        </select>
+        <label class="small muted"><input type="checkbox" id="affordable"> Only what I can afford</label>
+      </div>
+      <div class="results" id="results"></div>
+    </div>
+    <div class="panel"><h3 style="margin:0 0 8px">Your team</h3><div class="team" id="team"></div></div>
+  </div>
+
+  <!-- ===== DRAFT MODE ===== -->
+  <div id="draftMode" style="display:none">
+    <div class="panel">
+      <div class="row">
+        <div><div class="k small muted">Round</div><div class="v" id="draftRound">1 / 6</div></div>
+        <button class="btn ghost" id="draftReset" style="margin-left:auto">↻ Restart draft</button>
+      </div>
+      <div class="brk">Snake draft — first pick alternates <b>you · CPU · CPU · you · you · CPU</b> so neither side always has the advantage. Each round shows 5 Pokémon; whoever picks second chooses from what's left. The opponent's squad stays <b>face-down until the battle</b>, so you can't counter-pick. Once drafted, use ▲ to set your <b>battle order</b> — first card leads, last is your ace.</div>
+      <div class="brk" id="draftTurn" style="margin-top:6px"></div>
+    </div>
+    <div class="panel"><div class="draftgrid" id="draftOptions"></div></div>
+    <div class="panel">
+      <div><h3 style="margin:0 0 6px">Your squad</h3><div class="team" id="draftTeamMe"></div></div>
+      <div style="margin-top:10px"><h3 style="margin:0 0 6px">Opponent squad</h3><div class="team" id="draftTeamAI"></div></div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="draftSimBtn" disabled>Battle! ▶</button></div>
+    </div>
+  </div>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<div class="overlay" id="overlay" style="display:none">
+  <div class="panel modal" id="resultPanel">
+    <span class="close" id="resultClose" title="close">✕</span>
+    <h3 style="margin-top:0" id="resultTitle">League bracket</h3>
+    <div class="stage" id="stage" style="display:none">
+      <div class="fighter"><div class="fcap" id="fACap"></div>
+        <img id="fAImg" alt="" onerror="this.style.visibility='hidden'"><div class="fnm" id="fANm"></div>
+        <div class="hpbar"><div class="hpfill" id="fAHp"></div></div><div class="hptxt" id="fAHpTxt"></div></div>
+      <div style="text-align:center"><div class="roundlbl" id="roundLbl"></div><div class="vsbig">VS</div></div>
+      <div class="fighter"><div class="fcap" id="fBCap"></div>
+        <img id="fBImg" alt="" onerror="this.style.visibility='hidden'"><div class="fnm" id="fBNm"></div>
+        <div class="hpbar"><div class="hpfill" id="fBHp"></div></div><div class="hptxt" id="fBHpTxt"></div></div>
+    </div>
+    <div class="bracket" id="bracket"></div>
+    <div id="verdict"></div>
+    <div class="roundpop" id="roundPop" style="display:none"></div>
+  </div>
+</div>
+<script src="./pokemon-mayhem-data.js"></script>
+<script src="./pokemon-mayhem-game.js"></script>
+<script src="./pokemon-mayhem-ui.js"></script>
+</body>
+</html>

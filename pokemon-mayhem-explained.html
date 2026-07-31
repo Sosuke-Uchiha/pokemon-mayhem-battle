@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pokémon Mayhem — How the engine works, explained simply</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#171b2e; --panel2:#1e2440; --ink:#e8ecff; --muted:#a3abd0;
+    --line:#2c3358; --green:#3fbf7f; --orange:#e6a23c; --red:#e15b64; --blue:#5b8def;
+    --purple:#9b6ef3; --chip:#232a4d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:30px;margin:0 0 6px} h2{font-size:23px;margin:44px 0 10px;
+    border-bottom:1px solid var(--line);padding-bottom:8px}
+  h3{font-size:18px;margin:26px 0 8px;color:#cdd5ff}
+  p,li{color:var(--ink)} .muted{color:var(--muted)}
+  .lead{color:var(--muted);font-size:17px;margin-top:0}
+  code{background:#0b0e1a;border:1px solid var(--line);border-radius:5px;padding:1px 6px;
+    font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9d4ff}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;margin:14px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left}
+  th{background:var(--panel2);color:#cdd5ff} tr:nth-child(even) td{background:#141830}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .step{display:flex;gap:14px;align-items:flex-start;margin:10px 0}
+  .step .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--blue);
+    color:#fff;font-weight:700;display:grid;place-items:center}
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0}
+  .box{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:10px 14px;font-weight:600;text-align:center;min-width:120px}
+  .box small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+  .arrow{color:var(--muted);font-size:22px}
+  .callout{border-left:4px solid var(--orange);background:#211c12;
+    padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0}
+  .callout.blue{border-color:var(--blue);background:#12182b}
+  .callout.green{border-color:var(--green);background:#11201a}
+  .formula{background:#0b0e1a;border:1px dashed var(--line);border-radius:10px;
+    padding:14px 16px;font:14px/1.7 ui-monospace,Menlo,monospace;color:#cbd6ff;overflow-x:auto}
+  .toc a{color:var(--blue);text-decoration:none} .toc li{margin:3px 0}
+  .foot{margin-top:50px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);
+    padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pokémon Mayhem — how the engine works</h1>
+  <p class="lead">Everything the game does under the hood — team costs, HP, the damage formula,
+  abilities &amp; passives, mid-battle evolutions, and how the 16-team League bracket is built.
+  Spoiler warning: reading this removes most of the mystery!</p>
+
+  <div class="panel toc">
+    <b>Contents</b>
+    <ol>
+      <li><a href="#flow">The big picture</a></li>
+      <li><a href="#cost">Point costs &amp; the 20-point budget</a></li>
+      <li><a href="#hp">HP, fatigue &amp; battle scars</a></li>
+      <li><a href="#duel">Duels &amp; turn order</a></li>
+      <li><a href="#damage">The damage formula</a></li>
+      <li><a href="#types">Type effectiveness</a></li>
+      <li><a href="#abilities">Abilities</a></li>
+      <li><a href="#passives">Passives</a></li>
+      <li><a href="#evo">Evolution, Mega &amp; Gigantamax</a></li>
+      <li><a href="#league">The League bracket</a></li>
+      <li><a href="#draft">Draft mode</a></li>
+      <li><a href="#ai">How the AI plays</a></li>
+    </ol>
+  </div>
+
+  <h2 id="flow">1. The big picture</h2>
+  <div class="flow">
+    <div class="box">Build a squad<small>budget or draft</small></div>
+    <div class="arrow">→</div>
+    <div class="box">16-team bracket<small>single elimination</small></div>
+    <div class="arrow">→</div>
+    <div class="box">4 rounds<small>Qualifier → Final</small></div>
+    <div class="arrow">→</div>
+    <div class="box">Champion 🏆<small>or a named winner</small></div>
+  </div>
+  <p>Every match is a <b>full knockout</b>: both sides send Pokémon one at a time in the order
+  you set (first card leads, last is your ace). Two Pokémon duel until one faints; the winner
+  stays in — keeping its wounds — and faces the next one. When a whole team is down, the match ends.</p>
+
+  <h2 id="cost">2. Point costs &amp; the 20-point budget</h2>
+  <p>Each of the 1025 Pokémon has a hidden <b>rating</b>. Its point cost (1–10) is a curved
+  function of that rating, so elite Pokémon are disproportionately expensive:</p>
+  <div class="formula">t = (rating − minRating) / (maxRating − minRating)<br>
+cost = max(1, round(1 + 9 × t<sup>2.2</sup>))</div>
+  <p>You get <b>20 points</b> for up to <b>6 slots</b>. Two maxed legendaries eat the whole
+  budget — while ten points can buy five solid mid-tier fighters. Depth usually wins:
+  a full bench of six means six duels' worth of fresh HP.</p>
+
+  <h2 id="hp">3. HP, fatigue &amp; battle scars</h2>
+  <p>Battle HP is normalized from the Pokémon's base HP stat:</p>
+  <div class="formula">maxHP = 70 + 30 × clamp((baseHP − 30) / 120, 0..1)   → every Pokémon has 70–100 HP</div>
+  <div class="step"><div class="n">1</div><div><b>Fatigue:</b> a Pokémon's effective strength scales
+  with its current HP — from 100% at full health down to 35% at the brink. Worn-down sweepers hit softer.</div></div>
+  <div class="step"><div class="n">2</div><div><b>Battle scars:</b> in the League, damage
+  persists between rounds. Win the Quarterfinal 2-0 with a bleeding ace and it starts the
+  Semifinal just as hurt.</div></div>
+
+  <h2 id="duel">4. Duels &amp; turn order</h2>
+  <p>Within a duel, the Pokémon with the higher <b>Speed stat</b> attacks first, then the two
+  alternate. Speed ties are a coin flip. There are no misses — every attack lands for at
+  least chip damage — so faster Pokémon effectively get a free extra hit.</p>
+
+  <h2 id="damage">5. The damage formula</h2>
+  <div class="formula">damage = 24 × (attackerStr / defenderStr)<sup>0.6</sup> × statRatio × typeMult<sup>0.8</sup> × random(0.85–1.15) × crit</div>
+  <table>
+    <tr><th>Term</th><th>What it means</th></tr>
+    <tr><td><code>attackerStr / defenderStr</code></td><td>Effective strength = (rating + boosts) × fatigue. Stronger, healthier Pokémon hit harder and tank better.</td></tr>
+    <tr><td><code>statRatio</code></td><td>The attacker's better offense (Atk or SpA) vs the matching defense (Def or SpD), clamped to ×0.85–×1.35. Big stat mismatches enable one-shots.</td></tr>
+    <tr><td><code>typeMult</code></td><td>Type effectiveness (0, ¼, ½, 1, 2, 4) softened by the 0.8 exponent.</td></tr>
+    <tr><td><code>crit</code></td><td>8% chance, ×1.6 (Super Luck: 16%, Sniper: ×2.1, Shell/Battle Armor: never).</td></tr>
+  </table>
+  <p>Then ability/passive multipliers apply (see below), and the result is clamped:</p>
+  <table>
+    <tr><th>Situation</th><th class="num">Min</th><th class="num">Max</th></tr>
+    <tr><td>Normal hit</td><td class="num">5</td><td class="num">65</td></tr>
+    <tr><td>Super-effective hit (×2 or ×4)</td><td class="num">5</td><td class="num">110 — <b>a one-shot KO is possible</b></td></tr>
+    <tr><td>Blocked by an immunity ability</td><td class="num">—</td><td class="num">4 (chip only)</td></tr>
+  </table>
+  <div class="callout">Because max HP is 70–100, only a super-effective hit (or a big crit) can
+  KO a healthy Pokémon in one blow — which is exactly the hit <b>Sturdy</b> endures at 1 HP.</div>
+
+  <h2 id="types">6. Type effectiveness</h2>
+  <p>The full 18-type Pokémon chart is used. Each attacker "knows" one move per type it has
+  (e.g. a Water/Ice Pokémon can throw Water or Ice moves), and effectiveness multiplies across
+  the defender's two types — so ×4 and ×¼ hits exist. A true immunity (Ground vs Flying,
+  Electric vs Ground…) reduces the move to guaranteed chip damage.</p>
+  <div class="callout blue">Team-wide type advantage also nudges close matches: before a match
+  the engine compares how well each side's types line up and gives the better-covered team a
+  small edge to strength.</div>
+
+  <h2 id="abilities">7. Abilities</h2>
+  <p>Every Pokémon has exactly one ability. About 120 iconic species carry their canonical
+  signature (Charizard = Blaze, Gengar = Levitate, Azumarill = Huge Power…); everyone else
+  gets one that fits its stat profile — walls lean defensive, attackers lean offensive.
+  Assignment is deterministic, so a Pokémon's ability never changes between sessions.</p>
+  <table>
+    <tr><th>Ability</th><th>Effect in battle</th></tr>
+    <tr><td>Levitate / Flash Fire / Water Absorb / Volt Absorb / Sap Sipper</td>
+      <td><b>Immunity</b> — nullifies that move type (4 chip damage max). The AI avoids blocked moves.</td></tr>
+    <tr><td>Huge Power / Adaptability</td><td>All damage ×1.25 / ×1.20.</td></tr>
+    <tr><td>Guts</td><td>+30% damage while below half HP.</td></tr>
+    <tr><td>Blaze / Torrent / Overgrow / Swarm</td><td>+50% to same-type moves below ⅓ HP.</td></tr>
+    <tr><td>Moxie</td><td>Every KO permanently raises its attack for the rest of the match.</td></tr>
+    <tr><td>Intimidate</td><td>On send-out, the opposing Pokémon deals −15% for the duel.</td></tr>
+    <tr><td>Thick Fat</td><td>Halves incoming Fire and Ice damage.</td></tr>
+    <tr><td>Filter / Solid Rock</td><td>−25% from super-effective hits.</td></tr>
+    <tr><td>Multiscale</td><td>Half damage while at full HP.</td></tr>
+    <tr><td>Shell Armor / Battle Armor</td><td>Cannot be crit.</td></tr>
+    <tr><td>Rough Skin / Iron Barbs</td><td>Attacker takes 6 recoil damage every hit.</td></tr>
+    <tr><td>Sturdy</td><td><b>Endures one would-be KO at 1 HP</b> (once per duel, from full-to-1 hits).</td></tr>
+  </table>
+
+  <h2 id="passives">8. Passives</h2>
+  <p>A second, independent layer: every Pokémon also has one passive. ~60 canonical picks
+  (Blaziken = Speed Boost, Scizor = Technician, Slowbro = Regenerator…), type-flavored
+  status/heal passives for Electric/Fire/Poison/Ice/Water types, and stat-profile fallbacks
+  for the rest.</p>
+  <table>
+    <tr><th>Passive</th><th>Effect in battle</th></tr>
+    <tr><td>Sniper</td><td>Crits deal ×2.1 instead of ×1.6.</td></tr>
+    <tr><td>Super Luck</td><td>Crit chance doubled (16%).</td></tr>
+    <tr><td>Technician</td><td>Not-very-effective moves hit +30% harder.</td></tr>
+    <tr><td>Speed Boost</td><td>15% chance to strike again immediately at half damage.</td></tr>
+    <tr><td>Pressure</td><td>Opponents deal −8% to it.</td></tr>
+    <tr><td>Regenerator</td><td>Restores 12 HP after downing a foe.</td></tr>
+    <tr><td>Ice Body / Rain Dish</td><td>Recovers 2 HP every turn it acts.</td></tr>
+    <tr><td>Static / Flame Body / Poison Point</td><td>20% on being hit to afflict the attacker (−15% damage until it faints).</td></tr>
+    <tr><td>Anger Point</td><td>Taking a crit maxes its attack (+50%) for the duel.</td></tr>
+    <tr><td>Justified</td><td>Taking a super-effective hit permanently raises its power.</td></tr>
+  </table>
+  <div class="callout green">Abilities and passives stack — Blaziken below ⅓ HP with a Fire move
+  is +50% from Blaze, and can still Speed-Boost into a second strike.</div>
+
+  <h2 id="evo">9. Evolution, Mega &amp; Gigantamax</h2>
+  <div class="step"><div class="n">1</div><div><b>Evolution</b> — after winning a duel, a Pokémon
+  with a stronger evolved form has a <b>30% chance</b> to evolve on the spot. It gains the new
+  form's stats and a +40 HP surge, and the evolution sticks for the rest of the League.</div></div>
+  <div class="step"><div class="n">2</div><div><b>Mega Evolution / Gigantamax</b> — when a
+  Mega/G-Max-capable Pokémon is losing (weaker than its foe, or hurt below 55%), it has a
+  <b>35% chance per duel</b> to transform: +8 strength and +40 HP. Once per team per match.</div></div>
+
+  <h2 id="league">10. The League bracket</h2>
+  <p>16 teams, single elimination, 4 rounds: <b>Qualifier → Quarterfinal → Semifinal → Final</b>.
+  The field is built so the drama escalates:</p>
+  <table>
+    <tr><th>Slot</th><th>Who</th></tr>
+    <tr><td>You</td><td>Your squad, in your chosen battle order.</td></tr>
+    <tr><td>6 boss trainers</td><td>Drawn from a pool of 12 — the 8 Kanto gym leaders (rematch-era teams)
+      plus champions <b>Blue, Lance, Steven, Cynthia</b> — with fixed canonical rosters, no budget cap.</td></tr>
+    <tr><td>9 rivals</td><td>Johto leaders (Falkner, Bugsy, Whitney, Morty, Chuck, Jasmine, Clair, Pryce, Janine)
+      with random budget-20 teams of varying strength.</td></tr>
+  </table>
+  <p>Your early opponents are drawn from the weaker random rivals; the boss trainers are seeded
+  into the far side of the bracket, so you won't meet Cynthia before the Semifinal. Damage
+  persists between rounds, and if you're knocked out the bracket plays on — the verdict tells
+  you who took the trophy.</p>
+
+  <h2 id="draft">11. Draft mode</h2>
+  <p>Six rounds of "pick 1 of 5": you and the CPU alternate first pick from a shared reveal.
+  The CPU takes the highest-rated card 70% of the time (second-best otherwise). After six
+  rounds each, the two squads fight one full match — no budget involved, pure eye for value.</p>
+
+  <h2 id="ai">12. How the AI plays</h2>
+  <ul>
+    <li><b>Move choice:</b> 70% of the time the attacker picks its best type matchup;
+      30% it picks any non-immune move — so battles aren't perfectly deterministic.</li>
+    <li><b>Rival team building:</b> budget rivals spread their points across 6 slots with
+      per-slot randomness, so stronger rivals field deeper, pricier squads.</li>
+    <li><b>CPU battle order:</b> opponents order their team for a strong lead and ace.</li>
+  </ul>
+
+  <div class="foot">Pokémon Mayhem is 100% client-side — all of the above lives in
+  <code>pokemon-mayhem-game.js</code> (engine) and <code>pokemon-mayhem-ui.js</code> (presentation).
+  Sprites are fetched from public CDNs at runtime. <a href="pokemon-mayhem.html" style="color:var(--blue)">← Back to the game</a></div>
+
+</div>
+</body>
+</html>
